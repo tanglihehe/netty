@@ -36,6 +36,7 @@ import java.nio.charset.Charset;
  */
 public final class EmptyByteBuf extends ByteBuf {
 
+    static final int EMPTY_BYTE_BUF_HASH_CODE = 1;
     private static final ByteBuffer EMPTY_BYTE_BUFFER = ByteBuffer.allocateDirect(0);
     private static final long EMPTY_BYTE_BUFFER_ADDRESS;
 
@@ -93,6 +94,16 @@ public final class EmptyByteBuf extends ByteBuf {
     @Override
     public ByteBuf unwrap() {
         return null;
+    }
+
+    @Override
+    public ByteBuf asReadOnly() {
+        return Unpooled.unmodifiableBuffer(this);
+    }
+
+    @Override
+    public boolean isReadOnly() {
+        return false;
     }
 
     @Override
@@ -382,6 +393,12 @@ public final class EmptyByteBuf extends ByteBuf {
     }
 
     @Override
+    public CharSequence getCharSequence(int index, int length, Charset charset) {
+        checkIndex(index, length);
+        return null;
+    }
+
+    @Override
     public ByteBuf setBoolean(int index, boolean value) {
         throw new IndexOutOfBoundsException();
     }
@@ -500,6 +517,11 @@ public final class EmptyByteBuf extends ByteBuf {
     }
 
     @Override
+    public int setCharSequence(int index, CharSequence sequence, Charset charset) {
+        throw new IndexOutOfBoundsException();
+    }
+
+    @Override
     public boolean readBoolean() {
         throw new IndexOutOfBoundsException();
     }
@@ -610,6 +632,11 @@ public final class EmptyByteBuf extends ByteBuf {
     }
 
     @Override
+    public ByteBuf readRetainedSlice(int length) {
+        return checkLength(length);
+    }
+
+    @Override
     public ByteBuf readBytes(ByteBuf dst) {
         return checkLength(dst.writableBytes());
     }
@@ -654,6 +681,12 @@ public final class EmptyByteBuf extends ByteBuf {
     public int readBytes(FileChannel out, long position, int length) {
         checkLength(length);
         return 0;
+    }
+
+    @Override
+    public CharSequence readCharSequence(int length, Charset charset) {
+        checkLength(length);
+        return null;
     }
 
     @Override
@@ -728,7 +761,7 @@ public final class EmptyByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf writeBytes(ByteBuf src) {
-        throw new IndexOutOfBoundsException();
+        return checkLength(src.readableBytes());
     }
 
     @Override
@@ -777,6 +810,11 @@ public final class EmptyByteBuf extends ByteBuf {
     @Override
     public ByteBuf writeZero(int length) {
         return checkLength(length);
+    }
+
+    @Override
+    public int writeCharSequence(CharSequence sequence, Charset charset) {
+        throw new IndexOutOfBoundsException();
     }
 
     @Override
@@ -841,12 +879,27 @@ public final class EmptyByteBuf extends ByteBuf {
     }
 
     @Override
+    public ByteBuf retainedSlice() {
+        return this;
+    }
+
+    @Override
     public ByteBuf slice(int index, int length) {
         return checkIndex(index, length);
     }
 
     @Override
+    public ByteBuf retainedSlice(int index, int length) {
+        return checkIndex(index, length);
+    }
+
+    @Override
     public ByteBuf duplicate() {
+        return this;
+    }
+
+    @Override
+    public ByteBuf retainedDuplicate() {
         return this;
     }
 
@@ -924,7 +977,7 @@ public final class EmptyByteBuf extends ByteBuf {
 
     @Override
     public int hashCode() {
-        return 0;
+        return EMPTY_BYTE_BUF_HASH_CODE;
     }
 
     @Override

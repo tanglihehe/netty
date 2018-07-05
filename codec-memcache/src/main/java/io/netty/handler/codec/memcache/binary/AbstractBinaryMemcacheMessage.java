@@ -17,10 +17,12 @@ package io.netty.handler.codec.memcache.binary;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.memcache.AbstractMemcacheObject;
+import io.netty.util.internal.UnstableApi;
 
 /**
  * Default implementation of a {@link BinaryMemcacheMessage}.
  */
+@UnstableApi
 public abstract class AbstractBinaryMemcacheMessage
     extends AbstractMemcacheObject
     implements BinaryMemcacheMessage {
@@ -52,7 +54,10 @@ public abstract class AbstractBinaryMemcacheMessage
      */
     protected AbstractBinaryMemcacheMessage(ByteBuf key, ByteBuf extras) {
         this.key = key;
+        keyLength = key == null ? 0 : (short) key.readableBytes();
         this.extras = extras;
+        extrasLength = extras == null ? 0 : (byte) extras.readableBytes();
+        totalBodyLength = keyLength + extrasLength;
     }
 
     @Override
@@ -71,6 +76,9 @@ public abstract class AbstractBinaryMemcacheMessage
             this.key.release();
         }
         this.key = key;
+        short oldKeyLength = keyLength;
+        keyLength = key == null ? 0 : (short) key.readableBytes();
+        totalBodyLength  = totalBodyLength + keyLength - oldKeyLength;
         return this;
     }
 
@@ -80,6 +88,9 @@ public abstract class AbstractBinaryMemcacheMessage
             this.extras.release();
         }
         this.extras = extras;
+        short oldExtrasLength = extrasLength;
+        extrasLength = extras == null ? 0 : (byte) extras.readableBytes();
+        totalBodyLength = totalBodyLength + extrasLength - oldExtrasLength;
         return this;
     }
 
@@ -143,8 +154,14 @@ public abstract class AbstractBinaryMemcacheMessage
         return extrasLength;
     }
 
-    @Override
-    public BinaryMemcacheMessage setExtrasLength(byte extrasLength) {
+    /**
+     * Set the extras length of the message.
+     * <p/>
+     * This may be 0, since the extras content is optional.
+     *
+     * @param extrasLength the extras length.
+     */
+    BinaryMemcacheMessage setExtrasLength(byte extrasLength) {
         this.extrasLength = extrasLength;
         return this;
     }
@@ -154,8 +171,14 @@ public abstract class AbstractBinaryMemcacheMessage
         return keyLength;
     }
 
-    @Override
-    public BinaryMemcacheMessage setKeyLength(short keyLength) {
+    /**
+     * Set the key length of the message.
+     * <p/>
+     * This may be 0, since the key is optional.
+     *
+     * @param keyLength the key length to use.
+     */
+    BinaryMemcacheMessage setKeyLength(short keyLength) {
         this.keyLength = keyLength;
         return this;
     }

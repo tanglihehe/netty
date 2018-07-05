@@ -18,14 +18,17 @@ package io.netty.handler.codec.dns;
 import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.CorruptedFrameException;
 import io.netty.util.CharsetUtil;
-import io.netty.util.internal.StringUtil;
+import io.netty.util.internal.UnstableApi;
 
 /**
  * The default {@link DnsRecordDecoder} implementation.
  *
  * @see DefaultDnsRecordEncoder
  */
+@UnstableApi
 public class DefaultDnsRecordDecoder implements DnsRecordDecoder {
+
+    static final String ROOT = ".";
 
     /**
      * Creates a new instance.
@@ -87,12 +90,16 @@ public class DefaultDnsRecordDecoder implements DnsRecordDecoder {
             String name, DnsRecordType type, int dnsClass, long timeToLive,
             ByteBuf in, int offset, int length) throws Exception {
 
+        // DNS message compression means that domain names may contain "pointers" to other positions in the packet
+        // to build a full message. This means the indexes are meaningful and we need the ability to reference the
+        // indexes un-obstructed, and thus we cannot use a slice here.
+        // See https://www.ietf.org/rfc/rfc1035 [4.1.4. Message compression]
         if (type == DnsRecordType.PTR) {
-            in.setIndex(offset, offset + length);
-            return new DefaultDnsPtrRecord(name, dnsClass, timeToLive, decodeName(in));
+            return new DefaultDnsPtrRecord(
+                    name, dnsClass, timeToLive, decodeName0(in.duplicate().setIndex(offset, offset + length)));
         }
         return new DefaultDnsRawRecord(
-                name, type, dnsClass, timeToLive, in.duplicate().setIndex(offset, offset + length).retain());
+                name, type, dnsClass, timeToLive, in.retainedDuplicate().setIndex(offset, offset + length));
     }
 
     /**
@@ -103,7 +110,19 @@ public class DefaultDnsRecordDecoder implements DnsRecordDecoder {
      * @param in the byte buffer containing the DNS packet
      * @return the domain name for an entry
      */
-    protected String decodeName(ByteBuf in) {
+    protected String decodeName0(ByteBuf in) {
+        return decodeName(in);
+    }
+
+    /**
+     * Retrieves a domain name given a buffer containing a DNS packet. If the
+     * name contains a pointer, the position of the buffer will be set to
+     * directly after the pointer's index after the name has been read.
+     *
+     * @param in the byte buffer containing the DNS packet
+     * @return the domain name for an entry
+     */
+    public static String decodeName(ByteBuf in) {
         int position = -1;
         int checked = 0;
         final int end = in.writerIndex();
@@ -117,14 +136,20 @@ public class DefaultDnsRecordDecoder implements DnsRecordDecoder {
         // - https://github.com/netty/netty/issues/5014
         // - https://www.ietf.org/rfc/rfc1035.txt , Section 3.1
         if (readable == 0) {
-            return StringUtil.EMPTY_STRING;
+            return ROOT;
         }
+
         final StringBuilder name = new StringBuilder(readable << 1);
-        for (int len = in.readUnsignedByte(); in.isReadable() && len != 0; len = in.readUnsignedByte()) {
-            boolean pointer = (len & 0xc0) == 0xc0;
+        while (in.isReadable()) {
+            final int len = in.readUnsignedByte();
+            final boolean pointer = (len & 0xc0) == 0xc0;
             if (pointer) {
                 if (position == -1) {
                     position = in.readerIndex() + 1;
+                }
+
+                if (!in.isReadable()) {
+                    throw new CorruptedFrameException("truncated pointer in a name");
                 }
 
                 final int next = (len & 0x3f) << 8 | in.readUnsignedByte();
@@ -138,18 +163,29 @@ public class DefaultDnsRecordDecoder implements DnsRecordDecoder {
                 if (checked >= end) {
                     throw new CorruptedFrameException("name contains a loop.");
                 }
-            } else {
+            } else if (len != 0) {
+                if (!in.isReadable(len)) {
+                    throw new CorruptedFrameException("truncated label in a name");
+                }
                 name.append(in.toString(in.readerIndex(), len, CharsetUtil.UTF_8)).append('.');
                 in.skipBytes(len);
+            } else { // len == 0
+                break;
             }
         }
+
         if (position != -1) {
             in.readerIndex(position);
         }
+
         if (name.length() == 0) {
-            return StringUtil.EMPTY_STRING;
+            return ROOT;
         }
 
-        return name.substring(0, name.length() - 1);
+        if (name.charAt(name.length() - 1) != '.') {
+            name.append('.');
+        }
+
+        return name.toString();
     }
 }

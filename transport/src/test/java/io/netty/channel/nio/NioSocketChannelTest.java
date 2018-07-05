@@ -30,17 +30,20 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.CharsetUtil;
 import io.netty.util.NetUtil;
-import io.netty.util.internal.ThreadLocalRandom;
+import io.netty.util.internal.PlatformDependent;
 import org.junit.Test;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
@@ -170,7 +173,7 @@ public class NioSocketChannelTest {
 
         // Just some random bytes
         byte[] bytes = new byte[1024];
-        ThreadLocalRandom.current().nextBytes(bytes);
+        PlatformDependent.threadLocalRandom().nextBytes(bytes);
 
         Channel sc = null;
         Channel cc = null;
@@ -236,6 +239,41 @@ public class NioSocketChannelTest {
             }
             if (sc != null) {
                 sc.close();
+            }
+            group.shutdownGracefully();
+        }
+    }
+
+    @Test(timeout = 3000)
+    public void testShutdownOutputAndClose() throws IOException {
+        NioEventLoopGroup group = new NioEventLoopGroup(1);
+        ServerSocket socket = new ServerSocket();
+        socket.bind(new InetSocketAddress(0));
+        Socket accepted = null;
+        try {
+            Bootstrap sb = new Bootstrap();
+            sb.group(group).channel(NioSocketChannel.class);
+            sb.handler(new ChannelInboundHandlerAdapter());
+
+            SocketChannel channel = (SocketChannel) sb.connect(socket.getLocalSocketAddress())
+                    .syncUninterruptibly().channel();
+
+            accepted = socket.accept();
+            channel.shutdownOutput().syncUninterruptibly();
+
+            channel.close().syncUninterruptibly();
+        } finally {
+            if (accepted != null) {
+                try {
+                    accepted.close();
+                } catch (IOException ignore) {
+                    // ignore
+                }
+            }
+            try {
+                socket.close();
+            } catch (IOException ignore) {
+                // ignore
             }
             group.shutdownGracefully();
         }

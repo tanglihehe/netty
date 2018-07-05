@@ -33,6 +33,7 @@ import java.nio.charset.Charset;
  * @deprecated use the Little Endian accessors, e.g. {@code getShortLE}, {@code getIntLE}
  * instead.
  */
+@Deprecated
 public class SwappedByteBuf extends ByteBuf {
 
     private final ByteBuf buf;
@@ -68,7 +69,7 @@ public class SwappedByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf unwrap() {
-        return buf.unwrap();
+        return buf;
     }
 
     @Override
@@ -90,6 +91,16 @@ public class SwappedByteBuf extends ByteBuf {
     @Override
     public int maxCapacity() {
         return buf.maxCapacity();
+    }
+
+    @Override
+    public boolean isReadOnly() {
+        return buf.isReadOnly();
+    }
+
+    @Override
+    public ByteBuf asReadOnly() {
+        return Unpooled.unmodifiableBuffer(this);
     }
 
     @Override
@@ -366,6 +377,11 @@ public class SwappedByteBuf extends ByteBuf {
     }
 
     @Override
+    public CharSequence getCharSequence(int index, int length, Charset charset) {
+        return buf.getCharSequence(index, length, charset);
+    }
+
+    @Override
     public ByteBuf setBoolean(int index, boolean value) {
         buf.setBoolean(index, value);
         return this;
@@ -501,6 +517,11 @@ public class SwappedByteBuf extends ByteBuf {
     }
 
     @Override
+    public int setCharSequence(int index, CharSequence sequence, Charset charset) {
+        return buf.setCharSequence(index, sequence, charset);
+    }
+
+    @Override
     public boolean readBoolean() {
         return buf.readBoolean();
     }
@@ -611,6 +632,11 @@ public class SwappedByteBuf extends ByteBuf {
     }
 
     @Override
+    public ByteBuf readRetainedSlice(int length) {
+        return buf.readRetainedSlice(length).order(order);
+    }
+
+    @Override
     public ByteBuf readBytes(ByteBuf dst) {
         buf.readBytes(dst);
         return this;
@@ -660,6 +686,11 @@ public class SwappedByteBuf extends ByteBuf {
     @Override
     public int readBytes(FileChannel out, long position, int length) throws IOException {
         return buf.readBytes(out, position, length);
+    }
+
+    @Override
+    public CharSequence readCharSequence(int length, Charset charset) {
+        return buf.readCharSequence(length, charset);
     }
 
     @Override
@@ -804,6 +835,11 @@ public class SwappedByteBuf extends ByteBuf {
     }
 
     @Override
+    public int writeCharSequence(CharSequence sequence, Charset charset) {
+        return buf.writeCharSequence(sequence, charset);
+    }
+
+    @Override
     public int indexOf(int fromIndex, int toIndex, byte value) {
         return buf.indexOf(fromIndex, toIndex, value);
     }
@@ -859,13 +895,28 @@ public class SwappedByteBuf extends ByteBuf {
     }
 
     @Override
+    public ByteBuf retainedSlice() {
+        return buf.retainedSlice().order(order);
+    }
+
+    @Override
     public ByteBuf slice(int index, int length) {
         return buf.slice(index, length).order(order);
     }
 
     @Override
+    public ByteBuf retainedSlice(int index, int length) {
+        return buf.retainedSlice(index, length).order(order);
+    }
+
+    @Override
     public ByteBuf duplicate() {
         return buf.duplicate().order(order);
+    }
+
+    @Override
+    public ByteBuf retainedDuplicate() {
+        return buf.retainedDuplicate().order(order);
     }
 
     @Override

@@ -17,6 +17,7 @@ package io.netty.handler.codec.memcache.binary;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.memcache.MemcacheMessage;
+import io.netty.util.internal.UnstableApi;
 
 /**
  * An interface that defines a binary Memcache message, providing common properties for
@@ -28,6 +29,7 @@ import io.netty.handler.codec.memcache.MemcacheMessage;
  * @see BinaryMemcacheRequest
  * @see BinaryMemcacheResponse
  */
+@UnstableApi
 public interface BinaryMemcacheMessage extends MemcacheMessage {
 
     /**
@@ -69,15 +71,6 @@ public interface BinaryMemcacheMessage extends MemcacheMessage {
     short keyLength();
 
     /**
-     * Set the key length of the message.
-     * <p/>
-     * This may be 0, since the key is optional.
-     *
-     * @param keyLength the key length to use.
-     */
-    BinaryMemcacheMessage setKeyLength(short keyLength);
-
-    /**
      * Return the extras length of the message.
      * <p/>
      * This may be 0, since the extras content is optional.
@@ -85,15 +78,6 @@ public interface BinaryMemcacheMessage extends MemcacheMessage {
      * @return the extras length.
      */
     byte extrasLength();
-
-    /**
-     * Set the extras length of the message.
-     * <p/>
-     * This may be 0, since the extras content is optional.
-     *
-     * @param extrasLength the extras length.
-     */
-    BinaryMemcacheMessage setExtrasLength(byte extrasLength);
 
     /**
      * Returns the data type of the message.

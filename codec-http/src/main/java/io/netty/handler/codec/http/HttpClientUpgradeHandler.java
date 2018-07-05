@@ -195,6 +195,20 @@ public class HttpClientUpgradeHandler extends HttpObjectAggregator implements Ch
                 throw new IllegalStateException("Read HTTP response without requesting protocol switch");
             }
 
+            if (msg instanceof HttpResponse) {
+                HttpResponse rep = (HttpResponse) msg;
+                if (!SWITCHING_PROTOCOLS.equals(rep.status())) {
+                    // The server does not support the requested protocol, just remove this handler
+                    // and continue processing HTTP.
+                    // NOTE: not releasing the response since we're letting it propagate to the
+                    // next handler.
+                    ctx.fireUserEventTriggered(UpgradeEvent.UPGRADE_REJECTED);
+                    removeThisHandler(ctx);
+                    ctx.fireChannelRead(msg);
+                    return;
+                }
+            }
+
             if (msg instanceof FullHttpResponse) {
                 response = (FullHttpResponse) msg;
                 // Need to retain since the base class will release after returning from this method.
@@ -212,16 +226,6 @@ public class HttpClientUpgradeHandler extends HttpObjectAggregator implements Ch
                 response = (FullHttpResponse) out.get(0);
             }
 
-            if (!SWITCHING_PROTOCOLS.equals(response.status())) {
-                // The server does not support the requested protocol, just remove this handler
-                // and continue processing HTTP.
-                // NOTE: not releasing the response since we're letting it propagate to the
-                // next handler.
-                ctx.fireUserEventTriggered(UpgradeEvent.UPGRADE_REJECTED);
-                removeThisHandler(ctx);
-                return;
-            }
-
             CharSequence upgradeHeader = response.headers().get(HttpHeaderNames.UPGRADE);
             if (upgradeHeader != null && !AsciiString.contentEqualsIgnoreCase(upgradeCodec.protocol(), upgradeHeader)) {
                 throw new IllegalStateException(
@@ -231,10 +235,13 @@ public class HttpClientUpgradeHandler extends HttpObjectAggregator implements Ch
             // Upgrade to the new protocol.
             sourceCodec.prepareUpgradeFrom(ctx);
             upgradeCodec.upgradeTo(ctx, response);
-            sourceCodec.upgradeFrom(ctx);
 
             // Notify that the upgrade to the new protocol completed successfully.
             ctx.fireUserEventTriggered(UpgradeEvent.UPGRADE_SUCCESSFUL);
+
+            // We guarantee UPGRADE_SUCCESSFUL event will be arrived at the next handler
+            // before http2 setting frame and http response.
+            sourceCodec.upgradeFrom(ctx);
 
             // We switched protocols, so we're done with the upgrade response.
             // Release it and clear it from the output.
@@ -270,6 +277,6 @@ public class HttpClientUpgradeHandler extends HttpObjectAggregator implements Ch
             builder.append(',');
         }
         builder.append(HttpHeaderValues.UPGRADE);
-        request.headers().set(HttpHeaderNames.CONNECTION, builder.toString());
+        request.headers().add(HttpHeaderNames.CONNECTION, builder.toString());
     }
 }

@@ -17,6 +17,7 @@ package io.netty.resolver;
 
 import io.netty.util.NetUtil;
 import io.netty.util.internal.PlatformDependent;
+import io.netty.util.internal.UnstableApi;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -25,10 +26,12 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -38,6 +41,7 @@ import static io.netty.util.internal.ObjectUtil.*;
 /**
  * A parser for hosts files.
  */
+@UnstableApi
 public final class HostsFileParser {
 
     private static final String WINDOWS_DEFAULT_SYSTEM_ROOT = "C:\\Windows";
@@ -64,25 +68,27 @@ public final class HostsFileParser {
     /**
      * Parse hosts file at standard OS location.
      *
-     * @return a map of hostname or alias to {@link InetAddress}
+     * @return a {@link HostsFileEntries}
      */
-    public static Map<String, InetAddress> parseSilently() {
+    public static HostsFileEntries parseSilently() {
         File hostsFile = locateHostsFile();
         try {
             return parse(hostsFile);
         } catch (IOException e) {
-            logger.warn("Failed to load and parse hosts file at " + hostsFile.getPath(), e);
-            return Collections.emptyMap();
+            if (logger.isWarnEnabled()) {
+                logger.warn("Failed to load and parse hosts file at " + hostsFile.getPath(), e);
+            }
+            return HostsFileEntries.EMPTY;
         }
     }
 
     /**
      * Parse hosts file at standard OS location.
      *
-     * @return a map of hostname or alias to {@link InetAddress}
+     * @return a {@link HostsFileEntries}
      * @throws IOException file could not be read
      */
-    public static Map<String, InetAddress> parse() throws IOException {
+    public static HostsFileEntries parse() throws IOException {
         return parse(locateHostsFile());
     }
 
@@ -90,15 +96,15 @@ public final class HostsFileParser {
      * Parse a hosts file.
      *
      * @param file the file to be parsed
-     * @return a map of hostname or alias to {@link InetAddress}
+     * @return a {@link HostsFileEntries}
      * @throws IOException file could not be read
      */
-    public static Map<String, InetAddress> parse(File file) throws IOException {
+    public static HostsFileEntries parse(File file) throws IOException {
         checkNotNull(file, "file");
         if (file.exists() && file.isFile()) {
             return parse(new BufferedReader(new FileReader(file)));
         } else {
-            return Collections.emptyMap();
+            return HostsFileEntries.EMPTY;
         }
     }
 
@@ -106,14 +112,15 @@ public final class HostsFileParser {
      * Parse a reader of hosts file format.
      *
      * @param reader the file to be parsed
-     * @return a map of hostname or alias to {@link InetAddress}
+     * @return a {@link HostsFileEntries}
      * @throws IOException file could not be read
      */
-    public static Map<String, InetAddress> parse(Reader reader) throws IOException {
+    public static HostsFileEntries parse(Reader reader) throws IOException {
         checkNotNull(reader, "reader");
         BufferedReader buff = new BufferedReader(reader);
         try {
-            Map<String, InetAddress> entries = new HashMap<String, InetAddress>();
+            Map<String, Inet4Address> ipv4Entries = new HashMap<String, Inet4Address>();
+            Map<String, Inet6Address> ipv6Entries = new HashMap<String, Inet6Address>();
             String line;
             while ((line = buff.readLine()) != null) {
                 // remove comment
@@ -151,14 +158,26 @@ public final class HostsFileParser {
                 // loop over hostname and aliases
                 for (int i = 1; i < lineParts.size(); i ++) {
                     String hostname = lineParts.get(i);
-                    if (!entries.containsKey(hostname)) {
-                        // trying to map a host to multiple IPs is wrong
-                        // only the first entry is honored
-                        entries.put(hostname, InetAddress.getByAddress(hostname, ipBytes));
+                    String hostnameLower = hostname.toLowerCase(Locale.ENGLISH);
+                    InetAddress address = InetAddress.getByAddress(hostname, ipBytes);
+                    if (address instanceof Inet4Address) {
+                        Inet4Address previous = ipv4Entries.put(hostnameLower, (Inet4Address) address);
+                        if (previous != null) {
+                            // restore, we want to keep the first entry
+                            ipv4Entries.put(hostnameLower, previous);
+                        }
+                    } else {
+                        Inet6Address previous = ipv6Entries.put(hostnameLower, (Inet6Address) address);
+                        if (previous != null) {
+                            // restore, we want to keep the first entry
+                            ipv6Entries.put(hostnameLower, previous);
+                        }
                     }
                 }
             }
-            return entries;
+            return ipv4Entries.isEmpty() && ipv6Entries.isEmpty() ?
+                    HostsFileEntries.EMPTY :
+                    new HostsFileEntries(ipv4Entries, ipv6Entries);
         } finally {
             try {
                 buff.close();
